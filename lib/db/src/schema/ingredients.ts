@@ -27,7 +27,7 @@ export const scanHistoryTable = pgTable("scan_history", {
 
 export const ingredientMatchStatsTable = pgTable("ingredient_match_stats", {
   id: serial("id").primaryKey(),
-  ingredientId: integer("ingredient_id").notNull().references(() => ingredientsTable.id),
+  ingredientId: integer("ingredient_id").notNull().unique().references(() => ingredientsTable.id),
   matchCount: integer("match_count").notNull().default(0),
 });
 
