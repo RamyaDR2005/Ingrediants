@@ -2,7 +2,8 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { ingredientsTable, ingredientMatchStatsTable } from "@workspace/db";
 import { ScanIngredientsBody } from "@workspace/api-zod";
-import { ilike, or, eq, sql } from "drizzle-orm";
+import { ilike, sql } from "drizzle-orm";
+import { detectAndDecodeCode } from "../lib/codes";
 
 const router = Router();
 
@@ -16,12 +17,10 @@ function normalizeText(text: string): string {
 }
 
 function tokenizeIngredients(rawText: string): string[] {
-  // Split by common delimiters: comma, semicolon, bullet, newline
-  const parts = rawText
+  return rawText
     .split(/[,;\n•|]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 2);
-  return parts;
 }
 
 function computeGrade(riskScore: number): "A" | "B" | "C" | "D" | "F" {
@@ -39,18 +38,10 @@ function getProfileWarning(
   if (!ingredient.profileFlags) return null;
   const flags = ingredient.profileFlags.split(",").map((f) => f.trim());
   const warnings: string[] = [];
-  if (profile === "children" && flags.includes("children")) {
-    warnings.push(`Not recommended for children`);
-  }
-  if (profile === "pregnant" && flags.includes("pregnant")) {
-    warnings.push(`Caution during pregnancy`);
-  }
-  if (profile === "elderly" && flags.includes("elderly")) {
-    warnings.push(`Use caution for elderly individuals`);
-  }
-  if (profile === "allergen" && flags.includes("allergen")) {
-    warnings.push(`Potential allergen`);
-  }
+  if (profile === "children" && flags.includes("children")) warnings.push("Not recommended for children");
+  if (profile === "pregnant" && flags.includes("pregnant")) warnings.push("Caution during pregnancy");
+  if (profile === "elderly" && flags.includes("elderly")) warnings.push("Use caution for elderly individuals");
+  if (profile === "allergen" && flags.includes("allergen")) warnings.push("Potential allergen");
   return warnings.length > 0 ? warnings.join(". ") : null;
 }
 
@@ -67,13 +58,47 @@ router.post("/scan", async (req, res) => {
     matched: typeof ingredientsTable.$inferSelect | null;
     riskLevel: "low" | "medium" | "high" | "unknown";
     warning: string | null;
+    decodedCode?: string;
+    codeDescription?: string;
   }> = [];
 
   for (const token of tokens) {
+    // 1. Try chemical code detection first (E-numbers, INS, CI codes)
+    const codeMatch = detectAndDecodeCode(token);
+    if (codeMatch) {
+      const { code, entry } = codeMatch;
+      let warning = entry.description;
+      if (profile === "children" && entry.riskLevel === "high") {
+        warning += ". Not recommended for children.";
+      }
+      if (profile === "pregnant" && entry.riskLevel !== "low") {
+        warning += ". Use caution during pregnancy.";
+      }
+      matchedIngredients.push({
+        raw: token,
+        matched: {
+          id: -1,
+          name: entry.name,
+          code,
+          category: entry.category,
+          riskLevel: entry.riskLevel,
+          description: entry.description,
+          safetyNotes: entry.description,
+          profileFlags: null,
+          source: code,
+        },
+        riskLevel: entry.riskLevel,
+        warning,
+        decodedCode: code,
+        codeDescription: entry.description,
+      });
+      continue;
+    }
+
+    // 2. Fuzzy DB lookup
     const normalized = normalizeText(token);
     if (!normalized) continue;
 
-    // Try to find a match in the DB
     const words = normalized.split(" ").filter((w) => w.length > 2);
     const primaryTerm = words.slice(0, 3).join(" ");
 
@@ -86,7 +111,6 @@ router.post("/scan", async (req, res) => {
         .limit(1);
       if (rows.length > 0) {
         matched = rows[0];
-        // Update match stats
         await db
           .insert(ingredientMatchStatsTable)
           .values({ ingredientId: matched.id, matchCount: 1 })
@@ -114,10 +138,7 @@ router.post("/scan", async (req, res) => {
 
   // Compute risk score
   let totalScore = 0;
-  let lowCount = 0;
-  let mediumCount = 0;
-  let highCount = 0;
-  let unknownCount = 0;
+  let lowCount = 0, mediumCount = 0, highCount = 0, unknownCount = 0;
 
   for (const item of matchedIngredients) {
     if (item.riskLevel === "high") { totalScore += 10; highCount++; }
