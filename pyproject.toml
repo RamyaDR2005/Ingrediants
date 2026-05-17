@@ -5,6 +5,8 @@ description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
     "openpyxl>=3.1.5",
+    "paddleocr>=3.5.0",
+    "paddlepaddle>=3.3.1",
     "pandas>=3.0.3",
     "pillow>=12.2.0",
     "plotly>=6.7.0",

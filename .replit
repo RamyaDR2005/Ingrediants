@@ -37,4 +37,4 @@ externalPort = 3001
 
 [nix]
 channel = "stable-25_05"
-packages = ["freetype", "glibcLocales", "hdf5", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "rapidfuzz-cpp", "taskflow", "tcl", "tk", "zlib"]
+packages = ["freetype", "glibcLocales", "hdf5", "lcms2", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "rapidfuzz-cpp", "taskflow", "tcl", "tk", "zlib"]
