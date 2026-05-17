@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "AI Ingredient Scanner"
+title = "SafeScan — AI Ingredient Scanner"
 version = "1.0.0"
 id = "artifacts/ingredient-scanner"
 router = "path"
@@ -15,16 +15,7 @@ paths = [ "/" ]
 localPort = 18394
 
 [services.development]
-run = "pnpm --filter @workspace/ingredient-scanner run dev"
-
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/ingredient-scanner", "run", "build" ]
-publicDir = "artifacts/ingredient-scanner/dist/public"
-serve = "static"
-
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
+run = "cd /home/runner/workspace/artifacts/ingredient-scanner/streamlit_app && streamlit run app.py"
 
 [services.env]
 PORT = "18394"
