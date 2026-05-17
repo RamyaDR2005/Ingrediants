@@ -1,11 +1,13 @@
 import streamlit as st
 import sys
 import os
+import io
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 from database import init_db, save_scan
 from scan_engine import analyze_ingredients
+from image_enhancer import enhance_for_ocr, image_to_bytes
 
 init_db()
 
@@ -55,24 +57,111 @@ with tab_ocr:
     ocr_text = ""
     if uploaded_file is not None:
         from PIL import Image
-        import io
-        img = Image.open(uploaded_file)
-        st.image(img, caption="Uploaded label", use_container_width=True)
+        orig_img = Image.open(uploaded_file)
 
-        try:
-            import easyocr
-            with st.spinner("Reading text from image..."):
-                reader = easyocr.Reader(["en"], gpu=False)
-                img_bytes = io.BytesIO()
-                img.save(img_bytes, format="PNG")
-                result = reader.readtext(img_bytes.getvalue(), detail=0)
-                ocr_text = ", ".join(result)
-                st.success("Text extracted successfully!")
-                st.text_area("Extracted Text", ocr_text, height=120, key="ocr_result")
-        except ImportError:
-            st.warning("EasyOCR is not installed. Please install it with: `pip install easyocr`")
-        except Exception as e:
-            st.error(f"OCR failed: {e}")
+        st.markdown("#### Image Enhancement Options")
+        st.caption("Each step is applied in sequence to maximise OCR accuracy.")
+
+        enh_col1, enh_col2, enh_col3, enh_col4 = st.columns(4)
+        with enh_col1:
+            do_upscale   = st.checkbox("Resolution upscaling",      value=True, key="enh_upscale")
+            do_glare     = st.checkbox("Glare & shadow removal",    value=True, key="enh_glare")
+        with enh_col2:
+            do_denoise   = st.checkbox("Denoising",                 value=True, key="enh_denoise")
+            do_deskew    = st.checkbox("Text straightening",        value=True, key="enh_deskew")
+        with enh_col3:
+            do_contrast  = st.checkbox("Contrast enhancement",      value=True, key="enh_contrast")
+            do_sharpen   = st.checkbox("Sharpening",                value=True, key="enh_sharpen")
+        with enh_col4:
+            do_background = st.checkbox("Background cleaning",      value=True, key="enh_bg")
+            run_enhance  = st.button("✨ Enhance Image",            key="btn_enhance", use_container_width=True)
+
+        steps = {
+            "upscale":      do_upscale,
+            "glare_shadow": do_glare,
+            "denoise":      do_denoise,
+            "deskew":       do_deskew,
+            "contrast":     do_contrast,
+            "sharpen":      do_sharpen,
+            "background":   do_background,
+        }
+
+        if "enhanced_img" not in st.session_state:
+            st.session_state.enhanced_img = None
+            st.session_state.applied_steps = []
+
+        if run_enhance:
+            with st.spinner("Enhancing image for OCR…"):
+                enhanced, applied = enhance_for_ocr(orig_img, steps)
+                st.session_state.enhanced_img = enhanced
+                st.session_state.applied_steps = applied
+
+        before_col, after_col = st.columns(2)
+        with before_col:
+            st.markdown("**Original**")
+            st.image(orig_img, use_container_width=True)
+        with after_col:
+            st.markdown("**Enhanced**")
+            if st.session_state.enhanced_img is not None:
+                st.image(st.session_state.enhanced_img, use_container_width=True)
+                st.download_button(
+                    label="⬇️ Download enhanced image",
+                    data=image_to_bytes(st.session_state.enhanced_img),
+                    file_name="safescan_enhanced.png",
+                    mime="image/png",
+                    key="dl_enhanced",
+                )
+                if st.session_state.applied_steps:
+                    with st.expander("Applied enhancement steps"):
+                        for s in st.session_state.applied_steps:
+                            st.markdown(f"- {s}")
+            else:
+                st.info("Click **Enhance Image** to apply processing.")
+
+        st.markdown("---")
+        ocr_source = st.radio(
+            "Run OCR on:",
+            options=["enhanced", "original"],
+            format_func=lambda x: "Enhanced image" if x == "enhanced" else "Original image",
+            horizontal=True,
+            key="ocr_source",
+            disabled=st.session_state.enhanced_img is None,
+        )
+
+        run_ocr = st.button("🔍 Extract Text (OCR)", key="btn_ocr", type="primary")
+
+        if run_ocr:
+            ocr_img = st.session_state.enhanced_img if (ocr_source == "enhanced" and st.session_state.enhanced_img is not None) else orig_img
+            try:
+                import easyocr
+                with st.spinner("Reading text from image with EasyOCR…"):
+                    reader = easyocr.Reader(["en"], gpu=False)
+                    raw_bytes = image_to_bytes(ocr_img)
+                    ocr_results = reader.readtext(raw_bytes, detail=1)
+
+                detected_texts = []
+                for (bbox, text, confidence) in ocr_results:
+                    if confidence > 0.2:
+                        detected_texts.append(text)
+
+                ocr_text = ", ".join(detected_texts)
+                st.session_state["ocr_extracted"] = ocr_text
+
+                st.success(f"Extracted {len(detected_texts)} text region(s).")
+
+                with st.expander("Detailed OCR results (text + confidence)", expanded=False):
+                    for (bbox, text, confidence) in ocr_results:
+                        bar = "█" * int(confidence * 10)
+                        st.markdown(f"`{text}` — {confidence:.0%} {bar}")
+
+            except ImportError:
+                st.warning("EasyOCR is not installed. Run: `pip install easyocr`")
+            except Exception as e:
+                st.error(f"OCR failed: {e}")
+
+        if st.session_state.get("ocr_extracted"):
+            ocr_text = st.session_state["ocr_extracted"]
+            st.text_area("Extracted text (editable — correct any OCR mistakes before analyzing)", ocr_text, height=130, key="ocr_result")
 
 col1, col2, col3 = st.columns([2, 1, 1])
 with col1:
