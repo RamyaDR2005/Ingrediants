@@ -1,4 +1,9 @@
 modules = ["nodejs-24", "python-3.11", "postgresql-16"]
+run = "python main.py"
+language = "python3"
+
+[env]
+PYTHONUNBUFFERED = "1"
 
 [deployment]
 router = "application"
