@@ -1,14 +1,19 @@
 import streamlit as st
 import sys
 import os
+import sqlite3
+import json
+from datetime import datetime
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(__file__))
+# Add backend to path
+sys.path.insert(0, os.path.dirname(__file__) + "/../..")
 
-from database import init_db, save_scan
-from scan_engine import analyze_ingredients, TIERS
-from image_enhancer import enhance_for_ocr, image_to_bytes
-from ingredient_extractor import reconstruct_lines_from_bbox
+from backend.scan_service import analyze_ingredients_from_image, get_ingredient_database
+from backend.database import SessionLocal, init_db
+from backend import models
 
+# Initialize database
 init_db()
 
 st.set_page_config(
@@ -17,6 +22,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Session state for database operations
+db = SessionLocal()
 
 # ── Custom CSS (dark-theme accents) ───────────────────────────────────────────
 st.markdown("""

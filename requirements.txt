@@ -1,0 +1,38 @@
+# Ingredient Scanner Requirements
+# Python 3.11+
+
+# Web Framework & API
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.0.0
+
+# Streamlit UI
+streamlit>=1.57.0
+
+# Database
+sqlalchemy>=2.0.0
+pydantic-sqlalchemy>=0.1.0
+
+# OCR & Image Processing
+paddleocr>=3.5.0
+paddlepaddle>=3.3.1
+pillow>=12.2.0
+
+# Data Processing
+pandas>=3.0.3
+openpyxl>=3.1.5
+
+# Visualization
+plotly>=6.7.0
+
+# String Matching
+rapidfuzz>=3.14.5
+
+# Database Driver (SQLite is built-in)
+# For PostgreSQL support (optional):
+# psycopg2-binary>=2.9.12
+
+# Development (optional)
+pytest>=7.0.0
+black>=23.0.0
+flake8>=6.0.0
